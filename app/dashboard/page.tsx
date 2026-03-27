@@ -14,6 +14,8 @@ import {
   ScanSearch,
   Flame,
   BarChart3,
+  AlertTriangle,
+  DollarSign,
   Clock,
   Activity,
 } from "lucide-react";
@@ -320,7 +322,7 @@ function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
           Bet $100 → Win ${signal.betReturn}
         </div>
 
-        <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
+        <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
           <span>Probability: {signal.impliedProbability}%</span>
           <span>
             Edge:{" "}
@@ -336,6 +338,20 @@ function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
           </span>
           <span>Ratio: {signal.ratio}x</span>
         </div>
+
+        {signal.priceWarning && (
+          <div className="mb-3 flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-400">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            {signal.priceWarning}
+          </div>
+        )}
+
+        {signal.kellyBet > 0 && (
+          <div className="mb-4 flex items-center gap-1.5 text-xs text-gray-400">
+            <DollarSign className="h-3 w-3 text-emerald-400" />
+            Bet ${signal.kellyBet} of $1000 bankroll
+          </div>
+        )}
 
         <a
           href={signal.betUrl}
@@ -415,10 +431,26 @@ function SignalCard({ signal }: { signal: Signal }) {
           </div>
         </div>
 
+        {/* Mispricing warning */}
+        {signal.priceWarning && (
+          <div className="mb-2 flex items-center gap-1.5 rounded bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            {signal.priceWarning}
+          </div>
+        )}
+
         {/* Explanation */}
-        <p className="mb-4 text-xs leading-relaxed text-gray-500">
+        <p className="mb-3 text-xs leading-relaxed text-gray-500">
           {signal.explanation}
         </p>
+
+        {/* Kelly bet */}
+        {signal.kellyBet > 0 && (
+          <div className="mb-4 flex items-center gap-1.5 rounded bg-emerald-500/5 px-2.5 py-1.5 text-xs font-medium text-emerald-400">
+            <DollarSign className="h-3.5 w-3.5 shrink-0" />
+            Bet ${signal.kellyBet} of $1000 bankroll
+          </div>
+        )}
       </div>
 
       {/* Bet button */}

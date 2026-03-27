@@ -15,6 +15,11 @@ export interface Market {
   betUrl: string;
 }
 
+export type PriceWarning =
+  | "Longshot Trap — historically overpriced"
+  | "Near-certainty — low upside"
+  | null;
+
 export interface Signal extends Market {
   category: Category;
   ratio: number;
@@ -23,4 +28,6 @@ export interface Signal extends Market {
   confidence: number;
   betReturn: number;
   explanation: string;
+  priceWarning: PriceWarning;
+  kellyBet: number;
 }

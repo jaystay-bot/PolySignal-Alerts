@@ -1,4 +1,4 @@
-import type { Market, Signal, Verdict, Category } from "@/types";
+import type { Market, Signal, Verdict, Category, PriceWarning } from "@/types";
 
 // ── Thresholds — DO NOT CHANGE ─────────────────────────────────────────────
 const MIN_VOLUME = 10000;
@@ -66,6 +66,25 @@ function buildExplanation(
   return `Ratio at ${ratio}x on ${platform} — worth watching but not actionable yet.`;
 }
 
+// ── Mispricing warning ────────────────────────────────────────────────────
+function getPriceWarning(yesPrice: number): PriceWarning {
+  if (yesPrice < 0.20) return "Longshot Trap — historically overpriced";
+  if (yesPrice > 0.80) return "Near-certainty — low upside";
+  return null;
+}
+
+// ── Kelly bet size ───────────────────────────────────────────────────────
+const DEFAULT_BANKROLL = 1000;
+const KELLY_FRACTION = 0.25; // quarter-Kelly for safety
+
+function calcKellyBet(confidence: number, yesPrice: number): number {
+  const p = confidence / 100;
+  const odds = (1 - yesPrice) / yesPrice; // decimal odds minus 1
+  const kelly = (p * odds - (1 - p)) / odds;
+  if (kelly <= 0) return 0;
+  return Math.round(kelly * KELLY_FRACTION * DEFAULT_BANKROLL);
+}
+
 // ── Main engine ────────────────────────────────────────────────────────────
 export function analyzeMarket(market: Market): Signal | null {
   const { volume, liquidity, yesPrice, platform, question } = market;
@@ -96,6 +115,8 @@ export function analyzeMarket(market: Market): Signal | null {
     confidence,
     betReturn,
     explanation: buildExplanation(verdict, ratio, yesPrice, platform),
+    priceWarning: getPriceWarning(yesPrice),
+    kellyBet: calcKellyBet(confidence, yesPrice),
   };
 }
 
