@@ -248,6 +248,9 @@ def scan_markets():
     # PRIMARY: Kalshi
     try:
         kalshi_markets = fetch_kalshi_markets()
+        if kalshi_markets:
+            import json
+            log.info(f"DEBUG Kalshi sample market: {json.dumps(kalshi_markets[0], default=str)}")
         kalshi_signals = [s for m in kalshi_markets if (s := compute_kalshi_signal(m)) is not None]
         kalshi_sent = _send_signals(kalshi_signals)
         total_sent += kalshi_sent
