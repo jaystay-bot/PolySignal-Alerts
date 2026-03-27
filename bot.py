@@ -18,7 +18,7 @@ KALSHI_REFERRAL_URL = os.environ.get(
     "https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6",
 )
 
-KALSHI_API = "https://trading-api.kalshi.com/trade-api/v2"
+KALSHI_API = "https://api.elections.kalshi.com/trade-api/v2"
 POLYMARKET_API = "https://gamma-api.polymarket.com"
 
 # Signal thresholds — DO NOT CHANGE
@@ -42,8 +42,9 @@ bot = Bot(token=TELEGRAM_BOT_TOKEN)
 def fetch_kalshi_markets() -> list[dict]:
     url = f"{KALSHI_API}/markets"
     params = {"status": "open", "limit": 100}
+    headers = {"Accept": "application/json"}
     with httpx.Client(timeout=30) as client:
-        resp = client.get(url, params=params)
+        resp = client.get(url, params=params, headers=headers)
         resp.raise_for_status()
         data = resp.json()
         return data.get("markets", [])
@@ -80,9 +81,11 @@ def is_cooled_down(market_id: str) -> bool:
 
 def compute_kalshi_signal(market: dict) -> dict | None:
     try:
-        volume = float(market.get("volume", 0) or 0)
-        liquidity = float(market.get("open_interest", 0) or market.get("liquidity", 0) or 0)
-        yes_price = float(market.get("yes_ask", 0) or market.get("last_price", 0) or 0) / 100
+        volume = float(market.get("volume_fp", 0) or market.get("volume", 0) or 0)
+        liquidity = float(market.get("open_interest_fp", 0) or market.get("liquidity_dollars", 0) or 0)
+        # Kalshi prices are in dollar strings like "0.5500"
+        yes_raw = market.get("yes_ask_dollars", 0) or market.get("last_price_dollars", 0) or 0
+        yes_price = float(yes_raw)
     except (ValueError, IndexError):
         return None
 
