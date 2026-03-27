@@ -18,6 +18,8 @@ import {
   DollarSign,
   Clock,
   Activity,
+  X,
+  Info,
 } from "lucide-react";
 import type { Signal } from "@/types";
 
@@ -55,6 +57,7 @@ export default function DashboardPage() {
   const [sortBy, setSortBy] = useState<SortKey>("ratio");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeLabel, setTimeLabel] = useState("");
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Fetch signals
   async function fetchSignals() {
@@ -126,7 +129,7 @@ export default function DashboardPage() {
               </h1>
             </Link>
             <p className="mt-0.5 text-xs text-gray-500">
-              Live Prediction Market Edge Scanner
+              Live Prediction Market Edge Scanner &middot; polysignal.co
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -158,6 +161,23 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
+        {/* ── Kalshi Banner ────────────────────────────────────────────── */}
+        {!bannerDismissed && (
+          <div className="mb-6 flex items-start gap-3 rounded-lg border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-300">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+            <p className="flex-1">
+              Polymarket is currently unavailable in the US. All signals are
+              actionable on Kalshi — the legal, SEC-regulated alternative.
+            </p>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="shrink-0 text-gray-500 transition hover:text-gray-300"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* ── Error ────────────────────────────────────────────────────── */}
         {error && (
           <div className="mb-6 rounded-lg bg-red-900/30 px-4 py-3 text-sm text-red-300">
@@ -309,9 +329,12 @@ function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
           <span className="rounded bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
             TOP PICK #{rank}
           </span>
-          <span className="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
-            {signal.platform}
-          </span>
+          <div className="text-right">
+            <span className="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+              {signal.platform}
+            </span>
+            <p className="mt-0.5 text-[10px] text-gray-500">US betting via Kalshi</p>
+          </div>
         </div>
 
         <h3 className="mb-3 line-clamp-2 text-sm font-semibold leading-snug">
@@ -354,13 +377,12 @@ function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
         )}
 
         <a
-          href={signal.betUrl}
+          href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
           target="_blank"
           rel="noopener noreferrer"
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
         >
-          Bet on {signal.platform}
-          <ExternalLink className="h-3.5 w-3.5" />
+          Bet on Kalshi →
         </a>
       </div>
     </div>
@@ -390,6 +412,7 @@ function SignalCard({ signal }: { signal: Signal }) {
             {signal.category}
           </span>
         </div>
+        <p className="mb-2 text-[10px] text-gray-500">US betting via Kalshi</p>
 
         {/* Question */}
         <h3 className="mb-3 line-clamp-2 text-sm font-semibold leading-snug sm:text-base">
@@ -455,13 +478,12 @@ function SignalCard({ signal }: { signal: Signal }) {
 
       {/* Bet button */}
       <a
-        href={signal.betUrl}
+        href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
         target="_blank"
         rel="noopener noreferrer"
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
       >
-        BET on {signal.platform}
-        <ExternalLink className="h-3.5 w-3.5" />
+        Bet on Kalshi →
       </a>
     </div>
   );
