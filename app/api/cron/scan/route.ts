@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID!;
 const KALSHI_REFERRAL_URL =
-  process.env.KALSHI_REFERRAL_URL ?? "https://kalshi.com";
+  process.env.KALSHI_REFERRAL_URL ?? "https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6";
 
 const POLYMARKET_API = "https://gamma-api.polymarket.com";
 
