@@ -23,6 +23,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ signals: all, topPicks });
   } catch (err) {
     console.error("Signal aggregation error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch signals" }, { status: 500 });
   }
 }
