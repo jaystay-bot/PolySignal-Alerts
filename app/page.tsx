@@ -11,22 +11,7 @@ import {
   Filter,
 } from "lucide-react";
 
-// ── Types ───────────────────────────────────────────────────────────────────
-interface Signal {
-  id: string;
-  question: string;
-  platform: "Kalshi" | "Polymarket";
-  category: string;
-  yesPrice: number;
-  volume: number;
-  liquidity: number;
-  ratio: number;
-  verdict: "STRONG EDGE" | "EDGE";
-  confidence: number;
-  payout: number;
-  explanation: string;
-  betUrl: string;
-}
+import type { Signal } from "@/types";
 
 const CATEGORIES = ["All", "Politics", "Economics", "Sports", "Crypto"];
 
@@ -200,7 +185,7 @@ function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
         {signal.question}
       </h3>
       <div className="mb-3 text-lg font-bold text-emerald-400">
-        Bet $100 → Win ${signal.payout}
+        Bet $100 → Win ${signal.betReturn}
       </div>
       <div className="mb-3 flex flex-wrap gap-2 text-xs text-gray-400">
         <span>Probability: {Math.round(signal.yesPrice * 100)}%</span>
@@ -267,7 +252,7 @@ function SignalCard({ signal }: { signal: Signal }) {
           <div className="mb-1 flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-emerald-400" />
             <span className="text-lg font-bold text-emerald-400">
-              Bet $100 → Win ${signal.payout}
+              Bet $100 → Win ${signal.betReturn}
             </span>
           </div>
 
