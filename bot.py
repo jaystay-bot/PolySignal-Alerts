@@ -18,13 +18,14 @@ KALSHI_REFERRAL_URL = os.environ.get(
     "https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6",
 )
 
+KALSHI_API = "https://trading-api.kalshi.com/trade-api/v2"
 POLYMARKET_API = "https://gamma-api.polymarket.com"
 
 # Signal thresholds — DO NOT CHANGE
 MIN_VOLUME = 2000
 MIN_LIQUIDITY = 10000
-MIN_YES = 0.05
-MAX_YES = 0.95
+MIN_YES = 0.20
+MAX_YES = 0.80
 SIGNAL_RATIO = 20
 STRONG_RATIO = 40
 
@@ -37,8 +38,19 @@ pending_followups: list[dict] = []  # queued follow-up checks
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 
-# ── Polymarket API ──────────────────────────────────────────────────────────
-def fetch_markets() -> list[dict]:
+# ── Kalshi API (PRIMARY) ────────────────────────────────────────────────────
+def fetch_kalshi_markets() -> list[dict]:
+    url = f"{KALSHI_API}/markets"
+    params = {"status": "open", "limit": 100}
+    with httpx.Client(timeout=30) as client:
+        resp = client.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("markets", [])
+
+
+# ── Polymarket API (SECONDARY) ─────────────────────────────────────────────
+def fetch_polymarket_markets() -> list[dict]:
     url = f"{POLYMARKET_API}/markets"
     params = {"active": "true", "closed": "false", "limit": 500}
     with httpx.Client(timeout=30) as client:
@@ -64,6 +76,50 @@ def is_cooled_down(market_id: str) -> bool:
     if last is None:
         return True
     return (time.time() - last) > COOLDOWN_SECONDS
+
+
+def compute_kalshi_signal(market: dict) -> dict | None:
+    try:
+        volume = float(market.get("volume", 0) or 0)
+        liquidity = float(market.get("open_interest", 0) or market.get("liquidity", 0) or 0)
+        yes_price = float(market.get("yes_ask", 0) or market.get("last_price", 0) or 0) / 100
+    except (ValueError, IndexError):
+        return None
+
+    if volume < MIN_VOLUME or liquidity < MIN_LIQUIDITY:
+        return None
+    if not (MIN_YES <= yes_price <= MAX_YES):
+        return None
+
+    ratio = volume / liquidity
+    if ratio < SIGNAL_RATIO:
+        return None
+
+    market_id = market.get("ticker", market.get("id", ""))
+    if not is_cooled_down(market_id):
+        return None
+
+    verdict = "STRONG EDGE" if ratio >= STRONG_RATIO else "EDGE"
+    confidence = min(int((ratio / 50) * 100), 99)
+    target = round(yes_price + 0.04, 2)
+
+    from datetime import datetime, timezone
+
+    window_close = (
+        datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
+    )
+
+    return {
+        "market_id": market_id,
+        "question": market.get("title", market.get("subtitle", "Unknown market")),
+        "verdict": verdict,
+        "confidence": confidence,
+        "ratio": round(ratio, 1),
+        "yes_price": round(yes_price, 2),
+        "target": target,
+        "window_close": window_close,
+        "entry_time": time.time(),
+    }
 
 
 def compute_signal(market: dict) -> dict | None:
@@ -167,31 +223,46 @@ def send_telegram(text: str) -> None:
 
 
 # ── Core Loop ───────────────────────────────────────────────────────────────
-def scan_markets():
-    log.info("Scanning markets...")
-    try:
-        markets = fetch_markets()
-    except Exception as e:
-        log.error(f"Failed to fetch markets: {e}")
-        return
-
-    signals_sent = 0
-    for market in markets:
-        sig = compute_signal(market)
-        if sig is None:
-            continue
-
+def _send_signals(signals: list[dict]) -> int:
+    sent = 0
+    for sig in signals:
         msg = format_alert(sig)
         try:
             send_telegram(msg)
             cooldowns[sig["market_id"]] = time.time()
             pending_followups.append(sig)
-            signals_sent += 1
+            sent += 1
             log.info(f"Alert sent: {sig['question'][:60]}...")
         except Exception as e:
             log.error(f"Failed to send alert: {e}")
+    return sent
 
-    log.info(f"Scan complete. {signals_sent} signal(s) sent.")
+
+def scan_markets():
+    log.info("Scanning markets...")
+    total_sent = 0
+
+    # PRIMARY: Kalshi
+    try:
+        kalshi_markets = fetch_kalshi_markets()
+        kalshi_signals = [s for m in kalshi_markets if (s := compute_kalshi_signal(m)) is not None]
+        kalshi_sent = _send_signals(kalshi_signals)
+        total_sent += kalshi_sent
+        log.info(f"Kalshi: {kalshi_sent} signals found")
+    except Exception as e:
+        log.error(f"Failed to fetch Kalshi markets: {e}")
+
+    # SECONDARY: Polymarket
+    try:
+        poly_markets = fetch_polymarket_markets()
+        poly_signals = [s for m in poly_markets if (s := compute_signal(m)) is not None]
+        poly_sent = _send_signals(poly_signals)
+        total_sent += poly_sent
+        log.info(f"Polymarket: {poly_sent} signals found")
+    except Exception as e:
+        log.error(f"Failed to fetch Polymarket markets: {e}")
+
+    log.info(f"Scan complete. {total_sent} signal(s) sent.")
 
 
 def check_followups():

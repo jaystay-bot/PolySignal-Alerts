@@ -94,19 +94,30 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, [lastUpdated]);
 
-  // Filtered + sorted
+  // Filtered + sorted + split by platform
+  const sortFn = (a: Signal, b: Signal) => {
+    if (sortBy === "ratio") return b.ratio - a.ratio;
+    if (sortBy === "volume") return b.volume - a.volume;
+    return b.betReturn - a.betReturn;
+  };
+
   const filtered = useMemo(() => {
     let list =
       category === "All"
         ? [...signals]
         : signals.filter((s) => s.category === category);
-    list.sort((a, b) => {
-      if (sortBy === "ratio") return b.ratio - a.ratio;
-      if (sortBy === "volume") return b.volume - a.volume;
-      return b.betReturn - a.betReturn;
-    });
+    list.sort(sortFn);
     return list;
   }, [signals, category, sortBy]);
+
+  const kalshiSignals = useMemo(
+    () => filtered.filter((s) => s.platform === "Kalshi"),
+    [filtered],
+  );
+  const polySignals = useMemo(
+    () => filtered.filter((s) => s.platform === "Polymarket"),
+    [filtered],
+  );
 
   // Stats
   const stats = useMemo(() => {
@@ -166,8 +177,7 @@ export default function DashboardPage() {
           <div className="mb-6 flex items-start gap-3 rounded-lg border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-300">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
             <p className="flex-1">
-              Polymarket is currently unavailable in the US. All signals are
-              actionable on Kalshi — the legal, SEC-regulated alternative.
+              Polymarket unavailable in US. Kalshi is fully legal in all 50 states.
             </p>
             <button
               onClick={() => setBannerDismissed(true)}
@@ -272,11 +282,41 @@ export default function DashboardPage() {
         ) : filtered.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {filtered.map((sig) => (
-              <SignalCard key={sig.id} signal={sig} />
-            ))}
-          </div>
+          <>
+            {/* Section 1: Kalshi */}
+            {kalshiSignals.length > 0 && (
+              <section className="mb-10">
+                <div className="mb-4 flex items-center gap-2">
+                  <h2 className="text-lg font-bold">Top Kalshi Picks</h2>
+                  <span className="rounded-full bg-emerald-400/10 px-3 py-0.5 text-xs font-semibold text-emerald-400">
+                    US Legal — Bet Now
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {kalshiSignals.map((sig) => (
+                    <SignalCard key={sig.id} signal={sig} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Section 2: Polymarket */}
+            {polySignals.length > 0 && (
+              <section className="mb-10">
+                <div className="mb-4 flex items-center gap-2">
+                  <h2 className="text-lg font-bold">Top Polymarket Picks</h2>
+                  <span className="rounded-full bg-gray-700/50 px-3 py-0.5 text-xs font-semibold text-gray-400">
+                    Not available in US yet
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {polySignals.map((sig) => (
+                    <SignalCard key={sig.id} signal={sig} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </main>
 
@@ -376,14 +416,25 @@ function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
           </div>
         )}
 
-        <a
-          href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
-        >
-          Bet on Kalshi →
-        </a>
+        {signal.platform === "Kalshi" ? (
+          <a
+            href={`https://kalshi.com/search?query=${encodeURIComponent(signal.question)}&referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
+          >
+            Bet on Kalshi →
+          </a>
+        ) : (
+          <a
+            href={signal.betUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-700 py-2.5 text-sm font-bold text-gray-200 transition hover:bg-gray-600"
+          >
+            View on Polymarket →
+          </a>
+        )}
       </div>
     </div>
   );
@@ -477,14 +528,25 @@ function SignalCard({ signal }: { signal: Signal }) {
       </div>
 
       {/* Bet button */}
-      <a
-        href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
-      >
-        Bet on Kalshi →
-      </a>
+      {signal.platform === "Kalshi" ? (
+        <a
+          href={`https://kalshi.com/search?query=${encodeURIComponent(signal.question)}&referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
+        >
+          Bet on Kalshi →
+        </a>
+      ) : (
+        <a
+          href={signal.betUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-700 py-2.5 text-sm font-bold text-gray-200 transition hover:bg-gray-600"
+        >
+          View on Polymarket →
+        </a>
+      )}
     </div>
   );
 }
