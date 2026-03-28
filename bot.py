@@ -293,7 +293,14 @@ def scan_markets():
         if kalshi_markets:
             import json
             for i in range(min(3, len(kalshi_markets))):
-                log.info(f"DEBUG Kalshi market {i+1}: {json.dumps(kalshi_markets[i], default=str)}")
+                m = kalshi_markets[i]
+                vol = float(m.get("volume_fp", 0) or 0)
+                oi = float(m.get("open_interest_fp", 0) or 0)
+                ratio = vol / oi if oi > 0 else 0
+                log.info(f"DEBUG Kalshi market {i+1}: {json.dumps(m, default=str)}")
+                log.info(f"DEBUG Kalshi volume_fp: {m.get('volume_fp')}")
+                log.info(f"DEBUG Kalshi open_interest_fp: {m.get('open_interest_fp')}")
+                log.info(f"DEBUG Kalshi ratio: {ratio}")
         kalshi_signals = [s for m in kalshi_markets if (s := compute_kalshi_signal(m)) is not None]
         all_signals.extend(kalshi_signals)
         log.info(f"Kalshi: {len(kalshi_signals)} signals found")
