@@ -45,7 +45,7 @@ bot = Bot(token=TELEGRAM_BOT_TOKEN)
 # ── Kalshi API (PRIMARY) ────────────────────────────────────────────────────
 def fetch_kalshi_markets() -> list[dict]:
     url = f"{KALSHI_API}/events"
-    params = {"status": "open", "limit": 50, "with_nested_markets": "true"}
+    params = {"status": "open", "limit": 200, "with_nested_markets": "true"}
     headers = {"Accept": "application/json"}
     with httpx.Client(timeout=30) as client:
         resp = client.get(url, params=params, headers=headers)
@@ -54,13 +54,15 @@ def fetch_kalshi_markets() -> list[dict]:
         markets = []
         for event in events:
             markets.extend(event.get("markets", []))
-        return markets
+        # Sort by volume descending, return top 200
+        markets.sort(key=lambda m: float(m.get("volume_fp", 0) or 0), reverse=True)
+        return markets[:200]
 
 
 # ── Polymarket API (SECONDARY) ─────────────────────────────────────────────
 def fetch_polymarket_markets() -> list[dict]:
     url = f"{POLYMARKET_API}/markets"
-    params = {"active": "true", "closed": "false", "limit": 500}
+    params = {"active": "true", "closed": "false", "limit": 200}
     with httpx.Client(timeout=30) as client:
         resp = client.get(url, params=params)
         resp.raise_for_status()
