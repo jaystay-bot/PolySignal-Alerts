@@ -45,6 +45,11 @@ function timeAgo(date: Date): string {
   return `${Math.floor(s / 60)}m ago`;
 }
 
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 // ── Constants for timeframe tabs ──────────────────────────────────────────
 const TIMEFRAMES = [
   { days: 3, label: "3 Days" },
@@ -62,6 +67,7 @@ interface KalshiMarket {
   direction: "YES" | "NO";
   volume: number;
   liquidity: number;
+  endDate: string;
 }
 
 interface KalshiStats {
@@ -83,6 +89,7 @@ export default function DashboardPage() {
   const [timeLabel, setTimeLabel] = useState("");
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [timeframe, setTimeframe] = useState(7);
+  const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
 
   // Fetch signals + kalshi markets
   async function fetchSignals(days: number = timeframe) {
@@ -331,35 +338,74 @@ export default function DashboardPage() {
           </div>
           {kalshiMarkets.length > 0 ? (
             <div className="grid gap-3">
-              {kalshiMarkets.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 transition hover:border-gray-700"
-                >
-                  <div className="min-w-0 flex-1 pr-4">
-                    <h3 className="truncate text-sm font-medium">{m.title}</h3>
-                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400">
-                      <span>YES: <span className="text-emerald-400">${m.yesPrice}</span></span>
-                      <span>NO: <span className="text-red-400">${m.noPrice}</span></span>
-                      <span>Vol: {fmtVolume(m.volume)}</span>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {m.direction === "YES" ? (
-                      <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
-                        🟢 YES
-                      </span>
-                    ) : (
-                      <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-400">
-                        🔴 NO
-                      </span>
+              {kalshiMarkets.map((m) => {
+                const isExpanded = expandedMarket === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-lg border border-gray-800 bg-gray-900 transition hover:border-gray-700"
+                  >
+                    <button
+                      onClick={() => setExpandedMarket(isExpanded ? null : m.id)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left"
+                    >
+                      <div className="min-w-0 flex-1 pr-4">
+                        <h3 className="truncate text-sm font-medium">{m.title}</h3>
+                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400">
+                          <span>YES: <span className="text-emerald-400">${m.yesPrice}</span></span>
+                          <span>NO: <span className="text-red-400">${m.noPrice}</span></span>
+                          <span>Resolves: {fmtDate(m.endDate)}</span>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {m.direction === "YES" ? (
+                          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                            🟢 YES
+                          </span>
+                        ) : (
+                          <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-400">
+                            🔴 NO
+                          </span>
+                        )}
+                        <span className={`text-sm font-bold ${m.ratio >= 3 ? "text-emerald-400" : "text-gray-400"}`}>
+                          {m.ratio}x
+                        </span>
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-gray-800 px-4 py-4">
+                        <h4 className="mb-3 text-sm font-semibold">{m.title}</h4>
+                        <div className="mb-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                          <div>
+                            <span className="text-gray-500">YES Price</span>
+                            <p className="font-bold text-emerald-400">${m.yesPrice}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">NO Price</span>
+                            <p className="font-bold text-red-400">${m.noPrice}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Volume</span>
+                            <p className="font-bold">{fmtVolume(m.volume)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Resolves</span>
+                            <p className="font-bold">{fmtDate(m.endDate)}</p>
+                          </div>
+                        </div>
+                        <a
+                          href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
+                        >
+                          Bet on Kalshi →
+                        </a>
+                      </div>
                     )}
-                    <span className={`text-sm font-bold ${m.ratio >= 3 ? "text-emerald-400" : "text-gray-400"}`}>
-                      {m.ratio}x
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="py-8 text-center text-sm text-gray-500">

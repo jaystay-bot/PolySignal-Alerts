@@ -78,15 +78,20 @@ export async function GET(req: Request) {
       direction: "YES" | "NO";
       volume: number;
       liquidity: number;
+      endDate: string;
     }[] = [];
 
     for (const m of raw) {
       const endDt = parseEndDate(m.end_date ?? m.expiration_time ?? m.close_time);
       if (!endDt || !withinDays(endDt, days)) continue;
 
+      // Filter out multi-team/comma-separated titles (e.g. "Lakers, Celtics, ...")
+      const title = m.title ?? m.subtitle ?? "";
+      if (!title || /,.*,/.test(title) || /\bvs?\b.*,/i.test(title)) continue;
+
       const volume = parseFloat(m.volume_fp ?? m.volume ?? "0") || 0;
       const liquidity = parseFloat(m.open_interest_fp ?? m.open_interest ?? m.liquidity ?? "0") || 0;
-      if (volume === 0 || liquidity === 0) continue;
+      if (volume < 50000 || liquidity === 0) continue;
 
       // Dollar-string prices (e.g. "0.5500") or cent integers (e.g. 55)
       let yesPrice = parseFloat(m.yes_ask_dollars ?? m.last_price_dollars ?? "0") || 0;
@@ -107,13 +112,14 @@ export async function GET(req: Request) {
 
       markets.push({
         id: m.ticker ?? m.id ?? "",
-        title: m.title ?? m.subtitle ?? "Unknown market",
+        title: title || "Unknown market",
         yesPrice: Math.round(yesPrice * 100) / 100,
         noPrice,
         ratio,
         direction,
         volume,
         liquidity,
+        endDate: endDt.toISOString(),
       });
     }
 
