@@ -265,9 +265,7 @@ def format_followup(sig: dict, current_price: float) -> str:
 
 # ── Send to Telegram (sync wrapper) ────────────────────────────────────────
 def send_telegram(text: str) -> None:
-    asyncio.get_event_loop().run_until_complete(
-        bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=text)
-    )
+    asyncio.run(bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=text))
 
 
 # ── Core Loop ───────────────────────────────────────────────────────────────
