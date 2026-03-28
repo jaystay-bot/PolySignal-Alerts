@@ -45,6 +45,13 @@ function timeAgo(date: Date): string {
   return `${Math.floor(s / 60)}m ago`;
 }
 
+// ── Constants for timeframe tabs ──────────────────────────────────────────
+const TIMEFRAMES = [
+  { days: 3, label: "3 Days" },
+  { days: 7, label: "7 Days" },
+  { days: 30, label: "30 Days" },
+] as const;
+
 // ── Types for Kalshi market feed ───────────────────────────────────────────
 interface KalshiMarket {
   id: string;
@@ -52,6 +59,7 @@ interface KalshiMarket {
   yesPrice: number;
   noPrice: number;
   ratio: number;
+  direction: "YES" | "NO";
   volume: number;
   liquidity: number;
 }
@@ -74,15 +82,16 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeLabel, setTimeLabel] = useState("");
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [timeframe, setTimeframe] = useState(7);
 
   // Fetch signals + kalshi markets
-  async function fetchSignals() {
+  async function fetchSignals(days: number = timeframe) {
     setLoading(true);
     setError("");
     try {
       const [sigRes, kalshiRes] = await Promise.all([
         fetch("/api/signals").catch(() => null),
-        fetch("/api/kalshi-markets").catch(() => null),
+        fetch(`/api/kalshi-markets?days=${days}`).catch(() => null),
       ]);
 
       if (sigRes?.ok) {
@@ -104,10 +113,16 @@ export default function DashboardPage() {
     }
   }
 
+  // Refetch when timeframe changes
+  function handleTimeframe(days: number) {
+    setTimeframe(days);
+    fetchSignals(days);
+  }
+
   // Initial fetch + 60s auto-refresh
   useEffect(() => {
     fetchSignals();
-    const interval = setInterval(fetchSignals, 60 * 1000);
+    const interval = setInterval(() => fetchSignals(), 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -186,7 +201,7 @@ export default function DashboardPage() {
               Join Telegram
             </a>
             <button
-              onClick={fetchSignals}
+              onClick={() => fetchSignals()}
               disabled={loading}
               className="flex items-center gap-2 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium transition hover:bg-gray-700 disabled:opacity-50"
             >
@@ -291,17 +306,32 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Kalshi Market Feed ──────────────────────────────────────── */}
-        {kalshiMarkets.length > 0 && (
-          <section className="mb-10">
-            <div className="mb-4 flex items-center gap-2">
+        <section className="mb-10">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-emerald-400" />
               <h2 className="text-lg font-bold">Kalshi Signal Feed</h2>
-              <span className="rounded-full bg-emerald-400/10 px-3 py-0.5 text-xs font-semibold text-emerald-400">
-                Resolving within 30 days
-              </span>
             </div>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-gray-500" />
+              {TIMEFRAMES.map((tf) => (
+                <button
+                  key={tf.days}
+                  onClick={() => handleTimeframe(tf.days)}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                    timeframe === tf.days
+                      ? "bg-emerald-500 text-gray-950"
+                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                  }`}
+                >
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {kalshiMarkets.length > 0 ? (
             <div className="grid gap-3">
-              {kalshiMarkets.slice(0, 20).map((m) => (
+              {kalshiMarkets.map((m) => (
                 <div
                   key={m.id}
                   className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 transition hover:border-gray-700"
@@ -315,7 +345,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    {m.yesPrice < 0.50 ? (
+                    {m.direction === "YES" ? (
                       <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
                         🟢 YES
                       </span>
@@ -331,8 +361,12 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <p className="py-8 text-center text-sm text-gray-500">
+              No markets resolving within {timeframe} days.
+            </p>
+          )}
+        </section>
 
         {/* ── Signal Cards ─────────────────────────────────────────────── */}
         {loading && signals.length === 0 ? (
