@@ -6,7 +6,10 @@ from datetime import datetime, timezone, timedelta
 
 import httpx
 import schedule
+from dotenv import load_dotenv
 from telegram import Bot
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
