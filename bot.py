@@ -126,6 +126,8 @@ def compute_kalshi_signal(market: dict) -> dict | None:
         # Kalshi prices are in dollar strings like "0.5500"
         yes_raw = market.get("yes_ask_dollars", 0) or market.get("last_price_dollars", 0) or 0
         yes_price = float(yes_raw)
+        no_raw = market.get("no_ask_dollars", 0) or 0
+        no_price = float(no_raw) if no_raw else round(1.0 - yes_price, 2)
     except (ValueError, IndexError):
         return None
 
@@ -142,9 +144,20 @@ def compute_kalshi_signal(market: dict) -> dict | None:
     if not is_cooled_down(market_id):
         return None
 
+    # Detect direction from price movement
+    last = float(market.get("last_price_dollars", 0) or 0)
+    prev = float(market.get("previous_price_dollars", 0) or 0)
+    if last >= prev:
+        direction = "YES"
+        entry_price = round(yes_price, 2)
+        target = round(yes_price + 0.04, 2)
+    else:
+        direction = "NO"
+        entry_price = round(no_price, 2)
+        target = round(no_price + 0.04, 2)
+
     verdict = "STRONG EDGE" if ratio >= STRONG_RATIO else "EDGE"
     confidence = min(int((ratio / 50) * 100), 99)
-    target = round(yes_price + 0.04, 2)
 
     window_close = (
         datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
@@ -154,9 +167,10 @@ def compute_kalshi_signal(market: dict) -> dict | None:
         "market_id": market_id,
         "question": market.get("title", market.get("subtitle", "Unknown market")),
         "verdict": verdict,
+        "direction": direction,
         "confidence": confidence,
         "ratio": round(ratio, 1),
-        "yes_price": round(yes_price, 2),
+        "entry_price": entry_price,
         "target": target,
         "window_close": window_close,
         "entry_time": time.time(),
@@ -172,9 +186,9 @@ def compute_signal(market: dict) -> dict | None:
     try:
         volume = float(market.get("volume", 0) or 0)
         liquidity = float(market.get("liquidity", 0) or 0)
-        yes_price = float(
-            market.get("outcomePrices", "[0,0]").strip("[]").split(",")[0]
-        )
+        prices = market.get("outcomePrices", "[0,0]").strip("[]").split(",")
+        yes_price = float(prices[0])
+        no_price = float(prices[1]) if len(prices) > 1 else round(1.0 - yes_price, 2)
     except (ValueError, IndexError):
         return None
 
@@ -191,9 +205,19 @@ def compute_signal(market: dict) -> dict | None:
     if not is_cooled_down(market_id):
         return None
 
+    # Detect direction from price change
+    price_change = float(market.get("oneDayPriceChange", 0) or 0)
+    if price_change >= 0:
+        direction = "YES"
+        entry_price = round(yes_price, 2)
+        target = round(yes_price + 0.04, 2)
+    else:
+        direction = "NO"
+        entry_price = round(no_price, 2)
+        target = round(no_price + 0.04, 2)
+
     verdict = "STRONG EDGE" if ratio >= STRONG_RATIO else "EDGE"
     confidence = min(int((ratio / 50) * 100), 99)
-    target = round(yes_price + 0.04, 2)
 
     window_close = (
         datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
@@ -203,9 +227,10 @@ def compute_signal(market: dict) -> dict | None:
         "market_id": market_id,
         "question": market.get("question", "Unknown market"),
         "verdict": verdict,
+        "direction": direction,
         "confidence": confidence,
         "ratio": round(ratio, 1),
-        "yes_price": round(yes_price, 2),
+        "entry_price": entry_price,
         "target": target,
         "window_close": window_close,
         "entry_time": time.time(),
@@ -214,27 +239,33 @@ def compute_signal(market: dict) -> dict | None:
 
 
 def generate_explanation(sig: dict) -> str:
+    direction = sig["direction"]
     if sig["verdict"] == "STRONG EDGE":
         return (
             f"Heavy volume hitting this market at {sig['ratio']}x the liquidity — "
-            f"smart money is moving before the book catches up."
+            f"smart money is moving {direction} before the book catches up."
         )
     return (
         f"Volume is outpacing liquidity at {sig['ratio']}x — "
-        f"early momentum suggests YES has room to run."
+        f"early momentum suggests {direction} has room to run."
     )
 
 
 def format_alert(sig: dict) -> str:
     end_dt = datetime.fromisoformat(sig["end_date"])
     end_label = end_dt.strftime("%b %d %H:%M UTC")
+    direction = sig["direction"]
+    if direction == "YES":
+        bet_label = "\U0001f7e2 BET YES"
+    else:
+        bet_label = "\U0001f534 BET NO"
     return (
         f"\u26a1 SIGNAL DETECTED\n\n"
         f"{sig['question']}\n"
         f"Verdict: {sig['verdict']}\n"
         f"Confidence: {sig['confidence']}% | Ratio: {sig['ratio']}x\n\n"
-        f"\U0001f7e2 BET YES\n\n"
-        f"Entry: YES at ${sig['yes_price']}\n"
+        f"{bet_label}\n\n"
+        f"Entry: {direction} at ${sig['entry_price']}\n"
         f"Target: ${sig['target']}\n"
         f"Resolves: {end_label}\n"
         f"Window: ~30 minutes\n\n"
@@ -245,7 +276,7 @@ def format_alert(sig: dict) -> str:
 
 
 def format_followup(sig: dict, current_price: float) -> str:
-    entry = sig["yes_price"]
+    entry = sig["entry_price"]
     if current_price > entry:
         result = "\u2705 Moved up"
     elif current_price < entry:
