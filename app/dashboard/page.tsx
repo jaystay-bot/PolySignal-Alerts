@@ -5,9 +5,7 @@ import Link from "next/link";
 import {
   Zap,
   TrendingUp,
-  Trophy,
   RefreshCw,
-  ExternalLink,
   Send,
   Filter,
   ArrowUpDown,
@@ -50,7 +48,6 @@ function timeAgo(date: Date): string {
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [signals, setSignals] = useState<Signal[]>([]);
-  const [topPicks, setTopPicks] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [category, setCategory] = useState<string>("All");
@@ -68,7 +65,6 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error("Failed to fetch signals");
       const data = await res.json();
       setSignals(data.signals ?? []);
-      setTopPicks(data.topPicks ?? []);
       setLastUpdated(new Date());
     } catch (e) {
       setError(String(e));
@@ -195,23 +191,11 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Top Picks ────────────────────────────────────────────────── */}
-        {topPicks.length > 0 && (
-          <section className="mb-8">
-            <div className="mb-4 flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-amber-400" />
-              <h2 className="text-lg font-bold">Top Picks</h2>
-              <span className="ml-1 rounded-full bg-amber-400/10 px-3 py-0.5 text-xs font-semibold text-amber-400">
-                Highest edge across both platforms
-              </span>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {topPicks.map((sig, i) => (
-                <TopPickCard key={sig.id} signal={sig} rank={i + 1} />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* ── Live Status ──────────────────────────────────────────────── */}
+        <div className="mb-8 flex items-center gap-2 text-sm text-gray-400">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          Live signals updating every 5 minutes
+        </div>
 
         {/* ── Stats Bar ────────────────────────────────────────────────── */}
         <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -357,89 +341,6 @@ function StatCard({
   );
 }
 
-// ── Top Pick Card ───────────────────────────────────────────────────────────
-function TopPickCard({ signal, rank }: { signal: Signal; rank: number }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-gray-900 p-5 shadow-lg shadow-emerald-500/5">
-      {/* Glow effect */}
-      <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-2xl" />
-
-      <div className="relative">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="rounded bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
-            TOP PICK #{rank}
-          </span>
-          <div className="text-right">
-            <span className="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
-              {signal.platform}
-            </span>
-            <p className="mt-0.5 text-[10px] text-gray-500">US betting via Kalshi</p>
-          </div>
-        </div>
-
-        <h3 className="mb-3 line-clamp-2 text-sm font-semibold leading-snug">
-          {signal.question}
-        </h3>
-
-        <div className="mb-1 text-xl font-bold text-emerald-400">
-          Bet $100 → Win ${signal.betReturn}
-        </div>
-
-        <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
-          <span>Probability: {signal.impliedProbability}%</span>
-          <span>
-            Edge:{" "}
-            <span
-              className={
-                signal.verdict === "STRONG EDGE"
-                  ? "font-bold text-emerald-400"
-                  : "font-bold text-yellow-400"
-              }
-            >
-              {signal.verdict === "STRONG EDGE" ? "STRONG" : "MODERATE"}
-            </span>
-          </span>
-          <span>Ratio: {signal.ratio}x</span>
-        </div>
-
-        {signal.priceWarning && (
-          <div className="mb-3 flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-400">
-            <AlertTriangle className="h-3 w-3 shrink-0" />
-            {signal.priceWarning}
-          </div>
-        )}
-
-        {signal.kellyBet > 0 && (
-          <div className="mb-4 flex items-center gap-1.5 text-xs text-gray-400">
-            <DollarSign className="h-3 w-3 text-emerald-400" />
-            Bet ${signal.kellyBet} of $1000 bankroll
-          </div>
-        )}
-
-        {signal.platform === "Kalshi" ? (
-          <a
-            href={`https://kalshi.com/search?query=${encodeURIComponent(signal.question)}&referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
-          >
-            Bet on Kalshi →
-          </a>
-        ) : (
-          <a
-            href={signal.betUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-700 py-2.5 text-sm font-bold text-gray-200 transition hover:bg-gray-600"
-          >
-            View on Polymarket →
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Signal Card ─────────────────────────────────────────────────────────────
 function SignalCard({ signal }: { signal: Signal }) {
   const verdictColor =
@@ -464,6 +365,17 @@ function SignalCard({ signal }: { signal: Signal }) {
           </span>
         </div>
         <p className="mb-2 text-[10px] text-gray-500">US betting via Kalshi</p>
+
+        {/* Bet direction */}
+        {signal.yesPrice < 0.50 ? (
+          <span className="mb-2 inline-block rounded bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-400">
+            🟢 BET YES
+          </span>
+        ) : (
+          <span className="mb-2 inline-block rounded bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-400">
+            🔴 BET NO
+          </span>
+        )}
 
         {/* Question */}
         <h3 className="mb-3 line-clamp-2 text-sm font-semibold leading-snug sm:text-base">
@@ -528,25 +440,24 @@ function SignalCard({ signal }: { signal: Signal }) {
       </div>
 
       {/* Bet button */}
-      {signal.platform === "Kalshi" ? (
+      <div>
         <a
-          href={`https://kalshi.com/search?query=${encodeURIComponent(signal.question)}&referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6`}
+          href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
           target="_blank"
           rel="noopener noreferrer"
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-emerald-400"
         >
           Bet on Kalshi →
         </a>
-      ) : (
         <a
-          href={signal.betUrl}
+          href="https://kalshi.com/sign-up/?referral=68cedd79-0e8c-4d29-a28a-86d83bde7df6"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-700 py-2.5 text-sm font-bold text-gray-200 transition hover:bg-gray-600"
+          className="mt-1.5 block text-center text-xs text-gray-500 hover:text-gray-400 transition"
         >
-          View on Polymarket →
+          New to Kalshi? It&apos;s free to join →
         </a>
-      )}
+      </div>
     </div>
   );
 }
