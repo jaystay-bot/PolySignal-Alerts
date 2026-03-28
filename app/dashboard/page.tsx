@@ -45,9 +45,28 @@ function timeAgo(date: Date): string {
   return `${Math.floor(s / 60)}m ago`;
 }
 
+// ── Types for Kalshi market feed ───────────────────────────────────────────
+interface KalshiMarket {
+  id: string;
+  title: string;
+  yesPrice: number;
+  noPrice: number;
+  ratio: number;
+  volume: number;
+  liquidity: number;
+}
+
+interface KalshiStats {
+  scanned: number;
+  strongEdges: number;
+  bestRatio: number;
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [signals, setSignals] = useState<Signal[]>([]);
+  const [kalshiMarkets, setKalshiMarkets] = useState<KalshiMarket[]>([]);
+  const [kalshiStats, setKalshiStats] = useState<KalshiStats>({ scanned: 0, strongEdges: 0, bestRatio: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [category, setCategory] = useState<string>("All");
@@ -56,18 +75,30 @@ export default function DashboardPage() {
   const [timeLabel, setTimeLabel] = useState("");
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  // Fetch signals
+  // Fetch signals + kalshi markets
   async function fetchSignals() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/signals");
-      if (!res.ok) throw new Error("Failed to fetch signals");
-      const data = await res.json();
-      setSignals(data.signals ?? []);
+      const [sigRes, kalshiRes] = await Promise.all([
+        fetch("/api/signals").catch(() => null),
+        fetch("/api/kalshi-markets").catch(() => null),
+      ]);
+
+      if (sigRes?.ok) {
+        const data = await sigRes.json();
+        setSignals(data.signals ?? []);
+      }
+
+      if (kalshiRes?.ok) {
+        const data = await kalshiRes.json();
+        setKalshiMarkets(data.markets ?? []);
+        setKalshiStats(data.stats ?? { scanned: 0, strongEdges: 0, bestRatio: 0 });
+      }
+
       setLastUpdated(new Date());
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      // fail silently
     } finally {
       setLoading(false);
     }
@@ -115,13 +146,12 @@ export default function DashboardPage() {
     [filtered],
   );
 
-  // Stats
-  const stats = useMemo(() => {
-    const strongEdges = signals.filter((s) => s.verdict === "STRONG EDGE").length;
-    const bestRatio = signals.length > 0 ? Math.max(...signals.map((s) => s.ratio)) : 0;
-    const totalScanned = signals.length;
-    return { strongEdges, bestRatio, totalScanned };
-  }, [signals]);
+  // Stats — prefer kalshiStats from the dedicated route
+  const stats = useMemo(() => ({
+    totalScanned: kalshiStats.scanned || signals.length,
+    strongEdges: kalshiStats.strongEdges || signals.filter((s) => s.verdict === "STRONG EDGE").length,
+    bestRatio: kalshiStats.bestRatio || (signals.length > 0 ? Math.max(...signals.map((s) => s.ratio)) : 0),
+  }), [signals, kalshiStats]);
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -259,6 +289,50 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+
+        {/* ── Kalshi Market Feed ──────────────────────────────────────── */}
+        {kalshiMarkets.length > 0 && (
+          <section className="mb-10">
+            <div className="mb-4 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-emerald-400" />
+              <h2 className="text-lg font-bold">Kalshi Signal Feed</h2>
+              <span className="rounded-full bg-emerald-400/10 px-3 py-0.5 text-xs font-semibold text-emerald-400">
+                Resolving within 30 days
+              </span>
+            </div>
+            <div className="grid gap-3">
+              {kalshiMarkets.slice(0, 20).map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 transition hover:border-gray-700"
+                >
+                  <div className="min-w-0 flex-1 pr-4">
+                    <h3 className="truncate text-sm font-medium">{m.title}</h3>
+                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400">
+                      <span>YES: <span className="text-emerald-400">${m.yesPrice}</span></span>
+                      <span>NO: <span className="text-red-400">${m.noPrice}</span></span>
+                      <span>Vol: {fmtVolume(m.volume)}</span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {m.yesPrice < 0.50 ? (
+                      <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                        🟢 YES
+                      </span>
+                    ) : (
+                      <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-400">
+                        🔴 NO
+                      </span>
+                    )}
+                    <span className={`text-sm font-bold ${m.ratio >= 3 ? "text-emerald-400" : "text-gray-400"}`}>
+                      {m.ratio}x
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Signal Cards ─────────────────────────────────────────────── */}
         {loading && signals.length === 0 ? (
