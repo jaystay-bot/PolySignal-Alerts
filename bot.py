@@ -289,7 +289,8 @@ def scan_markets():
         kalshi_markets = fetch_kalshi_markets()
         if kalshi_markets:
             import json
-            log.info(f"DEBUG Kalshi sample market: {json.dumps(kalshi_markets[0], default=str)}")
+            for i in range(min(3, len(kalshi_markets))):
+                log.info(f"DEBUG Kalshi market {i+1}: {json.dumps(kalshi_markets[i], default=str)}")
         kalshi_signals = [s for m in kalshi_markets if (s := compute_kalshi_signal(m)) is not None]
         all_signals.extend(kalshi_signals)
         log.info(f"Kalshi: {len(kalshi_signals)} signals found")
@@ -299,6 +300,10 @@ def scan_markets():
     # SECONDARY: Polymarket
     try:
         poly_markets = fetch_polymarket_markets()
+        if poly_markets:
+            import json
+            for i in range(min(3, len(poly_markets))):
+                log.info(f"DEBUG Poly market {i+1}: {json.dumps(poly_markets[i], default=str)}")
         poly_signals = [s for m in poly_markets if (s := compute_signal(m)) is not None]
         all_signals.extend(poly_signals)
         log.info(f"Polymarket: {len(poly_signals)} signals found")
