@@ -25,11 +25,11 @@ KALSHI_REFERRAL_URL = os.environ.get(
 KALSHI_API = "https://api.elections.kalshi.com/trade-api/v2"
 POLYMARKET_API = "https://gamma-api.polymarket.com"
 
-# Signal thresholds — DO NOT CHANGE
+# Signal thresholds
 MIN_VOLUME = 2000
 MIN_LIQUIDITY = 10000
-MIN_YES = 0.20
-MAX_YES = 0.80
+MIN_YES = 0.15
+MAX_YES = 0.85
 SIGNAL_RATIO = 8
 STRONG_RATIO = 40
 
@@ -38,6 +38,7 @@ COOLDOWN_SECONDS = 60 * 60  # 60 min cooldown per market
 # ── State ───────────────────────────────────────────────────────────────────
 cooldowns: dict[str, float] = {}  # market_id -> timestamp of last alert
 pending_followups: list[dict] = []  # queued follow-up checks
+previous_prices: dict[str, float] = {}  # market_id -> YES price from last scan
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
@@ -123,11 +124,9 @@ def compute_kalshi_signal(market: dict) -> dict | None:
     try:
         volume = float(market.get("volume_fp", 0) or market.get("volume", 0) or 0)
         liquidity = float(market.get("open_interest_fp", 0) or market.get("liquidity_dollars", 0) or 0)
-        # Kalshi prices are in dollar strings like "0.5500"
         yes_raw = market.get("yes_ask_dollars", 0) or market.get("last_price_dollars", 0) or 0
         yes_price = float(yes_raw)
-        no_raw = market.get("no_ask_dollars", 0) or 0
-        no_price = float(no_raw) if no_raw else round(1.0 - yes_price, 2)
+        no_price = round(1.0 - yes_price, 2)
     except (ValueError, IndexError):
         return None
 
@@ -144,24 +143,18 @@ def compute_kalshi_signal(market: dict) -> dict | None:
     if not is_cooled_down(market_id):
         return None
 
-    # Detect direction from price movement
-    last = float(market.get("last_price_dollars", 0) or 0)
-    prev = float(market.get("previous_price_dollars", 0) or 0)
-    if last >= prev:
+    # Direction from scan-to-scan price tracking
+    prev_yes = previous_prices.get(market_id)
+    previous_prices[market_id] = yes_price
+    if prev_yes is None or yes_price == prev_yes:
+        return None  # first scan or no movement — skip
+    if yes_price > prev_yes:
         direction = "YES"
-        entry_price = round(yes_price, 2)
-        target = round(yes_price + 0.04, 2)
     else:
         direction = "NO"
-        entry_price = round(no_price, 2)
-        target = round(no_price + 0.04, 2)
 
     verdict = "STRONG EDGE" if ratio >= STRONG_RATIO else "EDGE"
     confidence = min(int((ratio / 50) * 100), 99)
-
-    window_close = (
-        datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
-    )
 
     return {
         "market_id": market_id,
@@ -170,9 +163,8 @@ def compute_kalshi_signal(market: dict) -> dict | None:
         "direction": direction,
         "confidence": confidence,
         "ratio": round(ratio, 1),
-        "entry_price": entry_price,
-        "target": target,
-        "window_close": window_close,
+        "yes_price": round(yes_price, 2),
+        "no_price": no_price,
         "entry_time": time.time(),
         "end_date": end_dt.isoformat(),
     }
@@ -205,23 +197,18 @@ def compute_signal(market: dict) -> dict | None:
     if not is_cooled_down(market_id):
         return None
 
-    # Detect direction from price change
-    price_change = float(market.get("oneDayPriceChange", 0) or 0)
-    if price_change >= 0:
+    # Direction from scan-to-scan price tracking
+    prev_yes = previous_prices.get(market_id)
+    previous_prices[market_id] = yes_price
+    if prev_yes is None or yes_price == prev_yes:
+        return None  # first scan or no movement — skip
+    if yes_price > prev_yes:
         direction = "YES"
-        entry_price = round(yes_price, 2)
-        target = round(yes_price + 0.04, 2)
     else:
         direction = "NO"
-        entry_price = round(no_price, 2)
-        target = round(no_price + 0.04, 2)
 
     verdict = "STRONG EDGE" if ratio >= STRONG_RATIO else "EDGE"
     confidence = min(int((ratio / 50) * 100), 99)
-
-    window_close = (
-        datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
-    )
 
     return {
         "market_id": market_id,
@@ -230,9 +217,8 @@ def compute_signal(market: dict) -> dict | None:
         "direction": direction,
         "confidence": confidence,
         "ratio": round(ratio, 1),
-        "entry_price": entry_price,
-        "target": target,
-        "window_close": window_close,
+        "yes_price": round(yes_price, 2),
+        "no_price": round(no_price, 2),
         "entry_time": time.time(),
         "end_date": end_dt.isoformat(),
     }
@@ -252,31 +238,28 @@ def generate_explanation(sig: dict) -> str:
 
 
 def format_alert(sig: dict) -> str:
-    end_dt = datetime.fromisoformat(sig["end_date"])
-    end_label = end_dt.strftime("%b %d %H:%M UTC")
     direction = sig["direction"]
     if direction == "YES":
         bet_label = "\U0001f7e2 BET YES"
+        move_label = "Price moving UP"
     else:
         bet_label = "\U0001f534 BET NO"
+        move_label = "Price moving DOWN"
     return (
-        f"\u26a1 SIGNAL DETECTED\n\n"
-        f"{sig['question']}\n"
-        f"Verdict: {sig['verdict']}\n"
-        f"Confidence: {sig['confidence']}% | Ratio: {sig['ratio']}x\n\n"
+        f"\u26a1 SIGNAL DETECTED\n"
+        f"{sig['question']}\n\n"
+        f"{move_label}\n"
         f"{bet_label}\n\n"
-        f"Entry: {direction} at ${sig['entry_price']}\n"
-        f"Target: ${sig['target']}\n"
-        f"Resolves: {end_label}\n"
-        f"Window: ~30 minutes\n\n"
+        f"YES: ${sig['yes_price']} | NO: ${sig['no_price']}\n"
+        f"Ratio: {sig['ratio']}x\n"
+        f"Confidence: {sig['confidence']}%\n\n"
         f"\"{generate_explanation(sig)}\"\n\n"
-        f"\u23f0 Window closes: {sig['window_close']}\n\n"
         f"\U0001f517 Bet on Kalshi \u2192 {KALSHI_REFERRAL_URL}"
     )
 
 
 def format_followup(sig: dict, current_price: float) -> str:
-    entry = sig["entry_price"]
+    entry = sig["yes_price"]
     if current_price > entry:
         result = "\u2705 Moved up"
     elif current_price < entry:
