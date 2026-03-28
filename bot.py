@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import asyncio
+from datetime import datetime, timezone, timedelta
 
 import httpx
 import schedule
@@ -72,6 +73,28 @@ def fetch_market_detail(market_id: str) -> dict | None:
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
+MAX_RESOLVE_HOURS = 72
+
+
+def parse_end_date(raw) -> datetime | None:
+    """Parse an end/expiration date string into a timezone-aware datetime, or None."""
+    if not raw:
+        return None
+    if isinstance(raw, (int, float)):
+        return datetime.fromtimestamp(raw, tz=timezone.utc)
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def within_72h(end_dt: datetime) -> bool:
+    now = datetime.now(timezone.utc)
+    return now < end_dt <= now + timedelta(hours=MAX_RESOLVE_HOURS)
+
+
 def is_cooled_down(market_id: str) -> bool:
     last = cooldowns.get(market_id)
     if last is None:
@@ -80,6 +103,13 @@ def is_cooled_down(market_id: str) -> bool:
 
 
 def compute_kalshi_signal(market: dict) -> dict | None:
+    # Require an end date within 72 hours
+    end_dt = parse_end_date(
+        market.get("end_date") or market.get("expiration_time") or market.get("close_time")
+    )
+    if end_dt is None or not within_72h(end_dt):
+        return None
+
     try:
         volume = float(market.get("volume_fp", 0) or market.get("volume", 0) or 0)
         liquidity = float(market.get("open_interest_fp", 0) or market.get("liquidity_dollars", 0) or 0)
@@ -106,8 +136,6 @@ def compute_kalshi_signal(market: dict) -> dict | None:
     confidence = min(int((ratio / 50) * 100), 99)
     target = round(yes_price + 0.04, 2)
 
-    from datetime import datetime, timezone
-
     window_close = (
         datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
     )
@@ -122,10 +150,18 @@ def compute_kalshi_signal(market: dict) -> dict | None:
         "target": target,
         "window_close": window_close,
         "entry_time": time.time(),
+        "end_date": end_dt.isoformat(),
     }
 
 
 def compute_signal(market: dict) -> dict | None:
+    # Require an end date within 72 hours
+    end_dt = parse_end_date(
+        market.get("end_date_iso") or market.get("end_date") or market.get("expirationDate")
+    )
+    if end_dt is None or not within_72h(end_dt):
+        return None
+
     try:
         volume = float(market.get("volume", 0) or 0)
         liquidity = float(market.get("liquidity", 0) or 0)
@@ -152,9 +188,6 @@ def compute_signal(market: dict) -> dict | None:
     confidence = min(int((ratio / 50) * 100), 99)
     target = round(yes_price + 0.04, 2)
 
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc)
     window_close = (
         datetime.fromtimestamp(time.time() + 1800, tz=timezone.utc).strftime("%H:%M UTC")
     )
@@ -169,6 +202,7 @@ def compute_signal(market: dict) -> dict | None:
         "target": target,
         "window_close": window_close,
         "entry_time": time.time(),
+        "end_date": end_dt.isoformat(),
     }
 
 
@@ -185,6 +219,8 @@ def generate_explanation(sig: dict) -> str:
 
 
 def format_alert(sig: dict) -> str:
+    end_dt = datetime.fromisoformat(sig["end_date"])
+    end_label = end_dt.strftime("%b %d %H:%M UTC")
     return (
         f"\u26a1 SIGNAL DETECTED\n\n"
         f"{sig['question']}\n"
@@ -192,6 +228,7 @@ def format_alert(sig: dict) -> str:
         f"Confidence: {sig['confidence']}% | Ratio: {sig['ratio']}x\n\n"
         f"Entry: YES at ${sig['yes_price']}\n"
         f"Target: ${sig['target']}\n"
+        f"Resolves: {end_label}\n"
         f"Window: ~30 minutes\n\n"
         f"\"{generate_explanation(sig)}\"\n\n"
         f"\u23f0 Window closes: {sig['window_close']}\n\n"
@@ -245,6 +282,8 @@ def scan_markets():
     log.info("Scanning markets...")
     total_sent = 0
 
+    all_signals = []
+
     # PRIMARY: Kalshi
     try:
         kalshi_markets = fetch_kalshi_markets()
@@ -252,9 +291,8 @@ def scan_markets():
             import json
             log.info(f"DEBUG Kalshi sample market: {json.dumps(kalshi_markets[0], default=str)}")
         kalshi_signals = [s for m in kalshi_markets if (s := compute_kalshi_signal(m)) is not None]
-        kalshi_sent = _send_signals(kalshi_signals)
-        total_sent += kalshi_sent
-        log.info(f"Kalshi: {kalshi_sent} signals found")
+        all_signals.extend(kalshi_signals)
+        log.info(f"Kalshi: {len(kalshi_signals)} signals found")
     except Exception as e:
         log.error(f"Failed to fetch Kalshi markets: {e}")
 
@@ -262,12 +300,15 @@ def scan_markets():
     try:
         poly_markets = fetch_polymarket_markets()
         poly_signals = [s for m in poly_markets if (s := compute_signal(m)) is not None]
-        poly_sent = _send_signals(poly_signals)
-        total_sent += poly_sent
-        log.info(f"Polymarket: {poly_sent} signals found")
+        all_signals.extend(poly_signals)
+        log.info(f"Polymarket: {len(poly_signals)} signals found")
     except Exception as e:
         log.error(f"Failed to fetch Polymarket markets: {e}")
 
+    # Sort by soonest end_date first
+    all_signals.sort(key=lambda s: s["end_date"])
+
+    total_sent = _send_signals(all_signals)
     log.info(f"Scan complete. {total_sent} signal(s) sent.")
 
 
