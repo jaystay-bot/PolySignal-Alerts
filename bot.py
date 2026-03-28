@@ -120,6 +120,8 @@ def compute_kalshi_signal(market: dict) -> dict | None:
     end_dt = parse_end_date(
         market.get("end_date") or market.get("expiration_time") or market.get("close_time")
     )
+    if end_dt is None or not within_30d(end_dt):
+        return None
 
     try:
         volume = float(market.get("volume_fp", 0) or market.get("volume", 0) or 0)
