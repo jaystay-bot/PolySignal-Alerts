@@ -116,12 +116,9 @@ def within_30d(end_dt: datetime) -> bool:
 
 
 def compute_kalshi_signal(market: dict) -> dict | None:
-    # Require an end date within 30 days
     end_dt = parse_end_date(
         market.get("end_date") or market.get("expiration_time") or market.get("close_time")
     )
-    if end_dt is None or not within_30d(end_dt):
-        return None
 
     try:
         volume = float(market.get("volume_fp", 0) or market.get("volume", 0) or 0)
@@ -168,12 +165,9 @@ def compute_kalshi_signal(market: dict) -> dict | None:
 
 
 def compute_signal(market: dict) -> dict | None:
-    # Require an end date within 72 hours
     end_dt = parse_end_date(
         market.get("endDate") or market.get("end_date_iso") or market.get("end_date")
     )
-    if end_dt is None or not within_72h(end_dt):
-        return None
 
     try:
         volume = float(market.get("volume", 0) or 0)
@@ -239,6 +233,7 @@ def format_alert(sig: dict) -> str:
         f"{sig['question']}\n"
         f"Verdict: {sig['verdict']}\n"
         f"Confidence: {sig['confidence']}% | Ratio: {sig['ratio']}x\n\n"
+        f"\U0001f7e2 BET YES\n\n"
         f"Entry: YES at ${sig['yes_price']}\n"
         f"Target: ${sig['target']}\n"
         f"Resolves: {end_label}\n"
