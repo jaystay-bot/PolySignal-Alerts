@@ -44,14 +44,17 @@ bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 # ── Kalshi API (PRIMARY) ────────────────────────────────────────────────────
 def fetch_kalshi_markets() -> list[dict]:
-    url = f"{KALSHI_API}/markets"
-    params = {"status": "open", "limit": 100}
+    url = f"{KALSHI_API}/events"
+    params = {"status": "open", "limit": 50, "with_nested_markets": "true"}
     headers = {"Accept": "application/json"}
     with httpx.Client(timeout=30) as client:
         resp = client.get(url, params=params, headers=headers)
         resp.raise_for_status()
-        data = resp.json()
-        return data.get("markets", [])
+        events = resp.json().get("events", [])
+        markets = []
+        for event in events:
+            markets.extend(event.get("markets", []))
+        return markets
 
 
 # ── Polymarket API (SECONDARY) ─────────────────────────────────────────────
@@ -160,7 +163,7 @@ def compute_kalshi_signal(market: dict) -> dict | None:
 def compute_signal(market: dict) -> dict | None:
     # Require an end date within 72 hours
     end_dt = parse_end_date(
-        market.get("end_date_iso") or market.get("end_date") or market.get("expirationDate")
+        market.get("endDate") or market.get("end_date_iso") or market.get("end_date")
     )
     if end_dt is None or not within_72h(end_dt):
         return None
