@@ -30,7 +30,7 @@ MIN_VOLUME = 2000
 MIN_LIQUIDITY = 10000
 MIN_YES = 0.20
 MAX_YES = 0.80
-SIGNAL_RATIO = 20
+SIGNAL_RATIO = 15
 STRONG_RATIO = 40
 
 COOLDOWN_SECONDS = 60 * 60  # 60 min cooldown per market
@@ -108,12 +108,17 @@ def is_cooled_down(market_id: str) -> bool:
     return (time.time() - last) > COOLDOWN_SECONDS
 
 
+def within_30d(end_dt: datetime) -> bool:
+    now = datetime.now(timezone.utc)
+    return now < end_dt <= now + timedelta(days=30)
+
+
 def compute_kalshi_signal(market: dict) -> dict | None:
-    # Require an end date within 72 hours
+    # Require an end date within 30 days
     end_dt = parse_end_date(
         market.get("end_date") or market.get("expiration_time") or market.get("close_time")
     )
-    if end_dt is None or not within_72h(end_dt):
+    if end_dt is None or not within_30d(end_dt):
         return None
 
     try:
